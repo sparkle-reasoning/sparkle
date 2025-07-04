@@ -166,8 +166,6 @@ gcs_credentials.json
 .pypirc
 pip.conf
 *.zip
-*.png
-run_scripts.sh
 gcs_credentials_old.json
 
 /debug
