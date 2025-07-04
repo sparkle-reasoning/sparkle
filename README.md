@@ -4,7 +4,8 @@
 
 [![arXiv](https://img.shields.io/badge/arXiv-2506.04723-b31b1b.svg)](https://arxiv.org/abs/2506.04723)
 [![Website](https://img.shields.io/badge/🌐-Project%20Page-blue)](https://sparkle-reasoning.github.io/)
-[![HuggingFace](https://img.shields.io/badge/🤗-Models%20&%20Datasets-yellow)](https://huggingface.co/sparkle-reasoning)
+[![Models](https://img.shields.io/badge/🤗-Models-yellow)](https://huggingface.co/sparkle-reasoning/models)
+[![Datasets](https://img.shields.io/badge/🤗-Datasets-orange)](https://huggingface.co/sparkle-reasoning/datasets)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 </div>
@@ -107,7 +108,7 @@ export PATH_TO_STAGE_TWO_MODEL="/path/to/stage2/model"
 
 ## 🤗 Model Checkpoints
 
-We release our checkpoints on [HuggingFace](https://huggingface.co/sparkle-reasoning):
+We release our checkpoints on [HuggingFace](https://huggingface.co/sparkle-reasoning/models):
 
 - [`sparkle-reasoning/SparkleRL-7B-Stage1`](https://huggingface.co/sparkle-reasoning/SparkleRL-7B-Stage1) - Foundation RL-tuned model trained with the large-scale full dataset
 - [`sparkle-reasoning/SparkleRL-7B-Stage2-aug`](https://huggingface.co/sparkle-reasoning/SparkleRL-7B-Stage2-aug) - **Recommended**: Curriculum-style training with a small amount of augmented hard problems
@@ -116,7 +117,7 @@ We release our checkpoints on [HuggingFace](https://huggingface.co/sparkle-reaso
 
 ## 📚 Datasets
 
-Our curated datasets are available on [HuggingFace](https://huggingface.co/sparkle-reasoning):
+Our curated datasets are available on [HuggingFace](https://huggingface.co/sparkle-reasoning/datasets):
 
 ### Training Data
 - [`sparkle-reasoning/dsr40k`](https://huggingface.co/datasets/sparkle-reasoning/dsr40k) - Large-scale training data (40.3k problems) used for stage one foundation training
@@ -175,4 +176,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - 📄 **Paper**: [Beyond Accuracy: Dissecting Mathematical Reasoning for LLMs Under Reinforcement Learning](https://arxiv.org/abs/2506.04723)
 - 🌐 **Project Page**: [https://sparkle-reasoning.github.io/](https://sparkle-reasoning.github.io/)
-- 🤗 **Models & Datasets**: [https://huggingface.co/sparkle-reasoning](https://huggingface.co/sparkle-reasoning)
+- 🤗 **Models**: [https://huggingface.co/sparkle-reasoning/models](https://huggingface.co/sparkle-reasoning/models)
+- 🤗 **Datasets**: [https://huggingface.co/sparkle-reasoning/datasets](https://huggingface.co/sparkle-reasoning/datasets)
