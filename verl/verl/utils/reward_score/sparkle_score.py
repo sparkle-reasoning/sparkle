@@ -23,6 +23,9 @@ Usage:
     score = scorer.compute_score(response, ground_truth, scoring_mode="hierarchical") 
     We recommend using the hierarchical mode for training which achieves the best performance
     among all scoring modes for training and is the same as the sparkle paper.
+    
+    For augmented responses (partial format), use:
+    score = scorer.compute_score(response, ground_truth, scoring_mode="hierarchical_aug", extra_info=extra_info)
 """
 
 import re
@@ -179,69 +182,166 @@ class MathScorer:
         
         return None
     
-    def validate_response_structure(self, response: str, return_score: bool = False) -> Union[bool, float]:
-        """Validate the structure of a mathematical reasoning response.
+    def validate_response_structure(self, response: str, do_print: bool = False, augmented: bool = False) -> bool:
+        """Performs comprehensive validation of response structure.
         
         Args:
-            response: The response string to validate
-            return_score: If True, return a score between 0.0 and 1.0; if False, return boolean
+            response: Processed response string from the model
+            do_print: Whether to print detailed validation information
+            augmented: Whether this is an augmented response (partial format)
             
         Returns:
-            Boolean indicating validity or float score between 0.0 and 1.0
+            Boolean indicating whether all formatting requirements are met
         """
-        do_print = self._should_debug()
-        
         if do_print:
             print("\n[Structure Validation]")
-        
-        # Check required tags
-        required_tags = {
-            'think_start': ('<think>', 0.25),
-            'think_end': ('</think>', 0.25),
-            'answer_start': ('<answer>', 0.25),
-            'answer_end': ('</answer>', 0.25)
-        }
-        
+        validation_passed = True
+
+        if augmented:
+            tags = {
+                'think_end': ('</think>', 1),
+                'answer_start': ('<answer>', 1),
+                'answer_end': ('</answer>', 1)
+            }
+        else:
+            tags = {
+                'think_start': ('<think>', 1),
+                'think_end': ('</think>', 1),
+                'answer_start': ('<answer>', 1),
+                'answer_end': ('</answer>', 1)
+            }
+
         positions = {}
-        format_score = 1.0
-        
-        # Validate tag presence and count
-        for tag_name, (tag_str, weight) in required_tags.items():
+        for tag_name, (tag_str, expected_count) in tags.items():
             count = response.count(tag_str)
-            positions[tag_name] = response.find(tag_str)
+            positions[tag_name] = pos = response.find(tag_str)
             
             if do_print:
-                print(f"  {tag_str}: count={count}, position={positions[tag_name]}")
+                print(f"\n  {tag_str}: count={count}, position={pos}")
             
-            if count != 1:
-                format_score -= weight
+            if count != expected_count:
                 if do_print:
-                    print(f"  [Error] {tag_str} appears {count} times (expected 1)")
-        
-        # Check tag ordering
-        if all(pos >= 0 for pos in positions.values()):
-            if (positions['think_start'] >= positions['think_end'] or
-                positions['think_end'] >= positions['answer_start'] or
-                positions['answer_start'] >= positions['answer_end']):
-                format_score -= 0.4
+                    print(f"\n  [Error] {tag_str} appears {count} times (expected {expected_count})")
+                validation_passed = False
+
+        # Verify tag order
+        if augmented:
+            if (positions['think_end'] > positions['answer_start'] or
+                positions['answer_start'] > positions['answer_end']):
                 if do_print:
-                    print("  [Error] Incorrect tag order")
-        
-        # Check for boxed notation in answer tags
+                    print("\n  [Error] Incorrect tag order: Expected </think><answer>...</answer>")
+                validation_passed = False
+            else:
+                if do_print:
+                    print("\n  Tag sequence validation passed")
+        else:
+            if (positions['think_start'] > positions['think_end'] or
+                positions['think_end'] > positions['answer_start'] or
+                positions['answer_start'] > positions['answer_end']):
+                if do_print:
+                    print("\n  [Error] Incorrect tag order: Expected <think>...</think><answer>...</answer>")
+                validation_passed = False
+            else:
+                if do_print:
+                    print("\n  Tag sequence validation passed")
+            
+        # Check for boxed notation inside answer tags
+        answer_content = None
         answer_match = re.search(r'<answer>(.*?)</answer>', response, re.DOTALL)
         if answer_match:
             answer_content = answer_match.group(1)
             if '\\boxed{' not in answer_content:
-                format_score -= 0.2
                 if do_print:
-                    print("  [Error] Missing \\boxed{} notation in answer")
+                    print("\n  [Error] Missing \\boxed{} notation inside <answer> tags")
+                validation_passed = False
+            else:
+                if do_print:
+                    print("\n  \\boxed{} notation found inside <answer> tags")
+
+        return validation_passed
+    
+    def validate_response_structure_granular(self, response: str, do_print: bool = False) -> float:
+        """Performs comprehensive validation of response structure with granular scoring.
         
+        Args:
+            response: Processed response string from the model
+            do_print: Whether to print detailed validation information
+            
+        Returns:
+            Float between 0.0 and 1.0 representing format quality
+        """
+        if do_print:
+            print("\n[Structure Validation]")
+        
+        # Initialize with maximum score
+        format_score = 1.0
+        
+        # Check required tags
+        tags = {
+            'think_start': ('<think>', 0.25),  # Each tag is worth 25% of format score
+            'think_end': ('</think>', 0.25),
+            'answer_start': ('<answer>', 0.25),
+            'answer_end': ('</answer>', 0.25)
+        }
+
+        # Track positions for order checking
+        positions = {}
+        missing_tags = []
+        
+        # Check tag presence
+        for tag_name, (tag_str, weight) in tags.items():
+            count = response.count(tag_str)
+            positions[tag_name] = pos = response.find(tag_str)
+            
+            if do_print:
+                print(f"\n  {tag_str}: count={count}, position={pos}")
+            
+            # Deduct points for missing or duplicate tags
+            if count != 1:
+                format_score -= weight
+                missing_tags.append(tag_name)
+                if do_print:
+                    print(f"\n  [Error] {tag_str} appears {count} times (expected 1)")
+
+        # Check for boxed notation inside answer tags
+        has_boxed = False
+        answer_content = None
+        answer_match = re.search(r'<answer>(.*?)</answer>', response, re.DOTALL)
+        
+        if answer_match:
+            answer_content = answer_match.group(1)
+            if '\\boxed{' in answer_content:
+                has_boxed = True
+                if do_print:
+                    print("\n  \\boxed{} notation found inside <answer> tags")
+            else:
+                # Deduct for missing boxed notation
+                format_score -= 0.2  # 20% penalty for missing boxed notation
+                if do_print:
+                    print("\n  [Error] Missing \\boxed{} notation inside <answer> tags")
+        
+        # Check tag ordering only if all tags are present
+        if len(missing_tags) == 0:
+            # Verify correct tag order
+            if (positions['think_start'] > positions['think_end'] or
+                positions['think_end'] > positions['answer_start'] or
+                positions['answer_start'] > positions['answer_end']):
+                
+                # Deduct for incorrect tag order
+                format_score -= 0.4  # 40% penalty for incorrect tag order
+                if do_print:
+                    print("\n  [Error] Incorrect tag order: Expected <think>...</think><answer>...</answer>")
+            else:
+                if do_print:
+                    print("\n  Tag sequence validation passed")
+        
+        # Ensure score stays in valid range
         format_score = max(0.0, min(1.0, format_score))
         
         if do_print:
-            print(f"  Format score: {format_score:.2f}")
+            print(f"\n  Final format score: {format_score:.2f}")
         
-        return format_score if return_score else format_score >= 0.7
+        return format_score
     
     def _normalize_answer(self, answer: str) -> str:
         """Normalize an answer string for comparison."""
@@ -406,17 +506,55 @@ class MathScorer:
             return solution_str.split("Assistant:", 1)[1]
         else:
             return solution_str
+
+    def extract_model_response_aug(self, solution_str: str, extra_info: str = None) -> tuple[str, bool]:
+        """Extract model response and detect if it's augmented (partial format).
+        
+        Args:
+            solution_str: Raw model response string
+            extra_info: Additional information that might indicate augmentation
+            
+        Returns:
+            Tuple of (processed_response, is_augmented)
+        """
+        # Extract the response part first
+        if "<|im_start|>assistant" in solution_str:
+            processed_str = solution_str.split("<|im_start|>assistant", 1)[1]
+        elif "Assistant:" in solution_str:
+            processed_str = solution_str.split("Assistant:", 1)[1]
+        else:
+            processed_str = solution_str
+        
+        # Detect if response is augmented (starts with partial format)
+        augmented = False
+        
+        # Check for augmented patterns in extra_info
+        if extra_info:
+            if "Assistant: <think>" in extra_info or "</think>" in extra_info:
+                augmented = True
+        
+        # Check for augmented patterns in the processed response
+        # Augmented responses typically start with </think> instead of <think>
+        processed_str_stripped = processed_str.strip()
+        if (processed_str_stripped.startswith("</think>") or 
+            "Assistant: <think>" in solution_str or
+            (not "<think>" in processed_str_stripped and "</think>" in processed_str_stripped)):
+            augmented = True
+            
+        return processed_str, augmented
     
     def compute_score(self, 
                      solution_str: str, 
                      ground_truth: Union[str, List[str]],
-                     scoring_mode: str = "standard") -> float:
+                     scoring_mode: str = "standard",
+                     extra_info: str = None) -> float:
         """Compute a comprehensive score for a model response.
         
         Args:
             solution_str: Raw model response string
             ground_truth: Ground truth answer(s)
-            scoring_mode: Scoring mode - "standard", "hierarchical", or "granular"
+            scoring_mode: Scoring mode - "standard", "hierarchical", "granular", or "hierarchical_aug"
+            extra_info: Additional information for augmented response detection
             
         Returns:
             Score based on the selected scoring mode
@@ -427,8 +565,16 @@ class MathScorer:
             print("\n" + "="*80)
             print(" SCORING EVALUATION ".center(80, '='))
         
-        # Extract model response and answer
-        response = self.extract_model_response(solution_str)
+        # Handle augmented responses
+        if scoring_mode == "hierarchical_aug":
+            response, augmented = self.extract_model_response_aug(solution_str, extra_info)
+            if do_print:
+                print(f"[Augmented Response]: {augmented}")
+        else:
+            response = self.extract_model_response(solution_str)
+            augmented = False
+        
+        # Extract answer
         answer_text = self.extract_solution(response)
         
         if do_print:
@@ -443,7 +589,15 @@ class MathScorer:
                 return 0.0
         
         # Validate format and grade answer
-        format_score = self.validate_response_structure(response, return_score=True)
+        if scoring_mode in ["standard", "granular"]:
+            # Use granular validation for standard and granular modes
+            format_score = self.validate_response_structure_granular(response, do_print=do_print)
+            format_correct = (format_score >= 0.7)  # Convert to boolean for standard mode
+        else:
+            # Use boolean validation for hierarchical modes
+            format_correct = self.validate_response_structure(response, do_print=do_print, augmented=augmented)
+            format_score = 1.0 if format_correct else 0.0  # Convert to score for display
+        
         answer_correct = self.grade_answer(answer_text, ground_truth)
         
         if do_print:
@@ -451,12 +605,10 @@ class MathScorer:
             print(f"[Answer Correct]: {answer_correct}")
         
         # Calculate final score based on mode - strictly following original logic
-        format_correct = (format_score >= 0.7)  # Convert to boolean as in original
-        
         if scoring_mode == "standard":
             # format and answer both 0 or 1
             score = (1.0 if format_correct else 0.0) + (1.0 if answer_correct else 0.0)
-        elif scoring_mode == "hierarchical": 
+        elif scoring_mode in ["hierarchical", "hierarchical_aug"]: 
             # exact boolean conditions
             if not answer_correct:
                 score = -1.0  # wrong_answer_penalty
@@ -581,148 +733,7 @@ def extract_solution(solution_str: str) -> str:
     return None
 
 
-def validate_response_structure(processed_str: str, do_print=False) -> bool:
-    """Performs comprehensive validation of response structure.
-    
-    Args:
-        processed_str: Processed response string from the model
-        
-    Returns:
-        Boolean indicating whether all formatting requirements are met
-    """
-    if do_print:
-        print("\n[Structure Validation]")
-    validation_passed = True
 
-    # Check required tags
-    tags = {
-        'think_start': ('<think>', 1),
-        'think_end': ('</think>', 1),
-        'answer_start': ('<answer>', 1),
-        'answer_end': ('</answer>', 1)
-    }
-
-    positions = {}
-    for tag_name, (tag_str, expected_count) in tags.items():
-        count = processed_str.count(tag_str)
-        positions[tag_name] = pos = processed_str.find(tag_str)
-        
-        if do_print:
-            print(f"\n  {tag_str}: count={count}, position={pos}")
-        
-        if count != expected_count:
-            if do_print:
-                print(f"\n  [Error] {tag_str} appears {count} times (expected {expected_count})")
-            validation_passed = False
-
-    # Verify tag order
-    if (positions['think_start'] > positions['think_end'] or
-        positions['think_end'] > positions['answer_start'] or
-        positions['answer_start'] > positions['answer_end']):
-        if do_print:
-            print("\n  [Error] Incorrect tag order: Expected <think>...</think><answer>...</answer>")
-        validation_passed = False
-    else:
-        if do_print:
-            print("\n  Tag sequence validation passed")
-        
-    # Check for boxed notation inside answer tags
-    answer_content = None
-    answer_match = re.search(r'<answer>(.*?)</answer>', processed_str, re.DOTALL)
-    if answer_match:
-        answer_content = answer_match.group(1)
-        if '\\boxed{' not in answer_content:
-            if do_print:
-                print("\n  [Error] Missing \\boxed{} notation inside <answer> tags")
-            validation_passed = False
-        else:
-            if do_print:
-                print("\n  \\boxed{} notation found inside <answer> tags")
-
-    return validation_passed
-
-def validate_response_structure_granular(processed_str: str, do_print=False) -> float:
-    """Performs comprehensive validation of response structure with granular scoring.
-    
-    Args:
-        processed_str: Processed response string from the model
-        do_print: Whether to print detailed validation information
-        
-    Returns:
-        Float between 0.0 and 1.0 representing format quality
-    """
-    if do_print:
-        print("\n[Structure Validation]")
-    
-    # Initialize with maximum score
-    format_score = 1.0
-    
-    # Check required tags
-    tags = {
-        'think_start': ('<think>', 0.25),  # Each tag is worth 25% of format score
-        'think_end': ('</think>', 0.25),
-        'answer_start': ('<answer>', 0.25),
-        'answer_end': ('</answer>', 0.25)
-    }
-
-    # Track positions for order checking
-    positions = {}
-    missing_tags = []
-    
-    # Check tag presence
-    for tag_name, (tag_str, weight) in tags.items():
-        count = processed_str.count(tag_str)
-        positions[tag_name] = pos = processed_str.find(tag_str)
-        
-        if do_print:
-            print(f"\n  {tag_str}: count={count}, position={pos}")
-        
-        # Deduct points for missing or duplicate tags
-        if count != 1:
-            format_score -= weight
-            missing_tags.append(tag_name)
-            if do_print:
-                print(f"\n  [Error] {tag_str} appears {count} times (expected 1)")
-
-    # Check for boxed notation inside answer tags
-    has_boxed = False
-    answer_content = None
-    answer_match = re.search(r'<answer>(.*?)</answer>', processed_str, re.DOTALL)
-    
-    if answer_match:
-        answer_content = answer_match.group(1)
-        if '\\boxed{' in answer_content:
-            has_boxed = True
-            if do_print:
-                print("\n  \\boxed{} notation found inside <answer> tags")
-        else:
-            # Deduct for missing boxed notation
-            format_score -= 0.2  # 20% penalty for missing boxed notation
-            if do_print:
-                print("\n  [Error] Missing \\boxed{} notation inside <answer> tags")
-    
-    # Check tag ordering only if all tags are present
-    if len(missing_tags) == 0:
-        # Verify correct tag order
-        if (positions['think_start'] > positions['think_end'] or
-            positions['think_end'] > positions['answer_start'] or
-            positions['answer_start'] > positions['answer_end']):
-            
-            # Deduct for incorrect tag order
-            format_score -= 0.4  # 40% penalty for incorrect tag order
-            if do_print:
-                print("\n  [Error] Incorrect tag order: Expected <think>...</think><answer>...</answer>")
-        else:
-            if do_print:
-                print("\n  Tag sequence validation passed")
-    
-    # Ensure score stays in valid range
-    format_score = max(0.0, min(1.0, format_score))
-    
-    if do_print:
-        print(f"\n  Final format score: {format_score:.2f}")
-    
-    return format_score
 
 # Dan Hendrycks' code
 def mathd_normalize_answer(answer: Optional[str]) -> Optional[str]:
@@ -1355,6 +1366,18 @@ def compute_score_o2(solution_str: str,
     scorer = MathScorer(debug_probability=0.03)
     return scorer.compute_score(solution_str, ground_truth, scoring_mode="hierarchical")
 
+def compute_score_o2_aug(solution_str: str, 
+                 ground_truth: Union[str, List[str]],
+                 full_reward: float = 2.0,
+                 partial_reward: float = 1.0,
+                 wrong_answer_penalty: float = -1.0,
+                 extra_info=None):
+    """Deprecated - use MathScorer.compute_score with scoring_mode="hierarchical_aug" instead.
+    
+    Computes score for model response with augmented format support.
+    """
+    scorer = MathScorer(debug_probability=0.03)
+    return scorer.compute_score(solution_str, ground_truth, scoring_mode="hierarchical_aug", extra_info=extra_info)
 
 # Deprecated - use MathScorer.compute_score with scoring_mode="hierarchical" instead
 def compute_score_n5(solution_str: str, 
@@ -1442,6 +1465,66 @@ The measure of the largest angle is \\boxed{179} degrees.
     for mode in ["standard", "hierarchical", "granular"]:
         score = scorer.compute_score(sample_response, ground_truth, scoring_mode=mode)
         print(f"\n{mode.upper()} mode score: {score}")
+    
+    # Test augmented response
+    print("\n\n3. AUGMENTED RESPONSE TEST")
+    print("-" * 30)
+    
+    augmented_response = """<|im_start|>system
+You are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>
+<|im_start|>user
+A conversation between User and Assistant. The user asks a math question, and the Assistant solves it step by step. The Assistant first thinks about the complete reasoning process in the mind enclosed within <think> </think> tags. Then the Assistant provides a clear, concise answer to the user within <answer> </answer> tags, with the final result enclosed in \boxed{} notation. User: A convex pentagon has interior angles with measures $x+1$, $2x$, $3x$, $4x$, and $5x-1$ degrees.  What is the measure of the largest angle? Assistant: <think>
+To find the measure of the largest angle in the convex pentagon, <|im_end|>
+<|im_start|>assistant
+we start by using the fact that the sum of the interior angles of a pentagon is \(540\) degrees. The given angles are \(x+1\), \(2x\), \(3x\), \(4x\), and \(5x-1\). We can set up the equation for the sum of these angles:
+
+\[
+(x+1) + 2x + 3x + 4x + (5x-1) = 540
+\]
+
+Next, we combine like terms:
+
+\[
+x + 1 + 2x + 3x + 4x + 5x - 1 = 540
+\]
+
+\[
+15x = 540
+\]
+
+Solving for \(x\), we divide both sides by 15:
+
+\[
+x = \frac{540}{15} = 36
+\]
+
+Now that we have the value of \(x\), we can find the measure of each angle:
+ 
+\[
+x + 1 = 36 + 1 = 37
+\]
+\[
+2x = 2 \cdot 36 = 72
+\]
+\[
+3x = 3 \cdot 36 = 108
+\]
+\[
+4x = 4 \cdot 36 = 144
+\]
+\[
+5x - 1 = 5 \cdot 36 - 1 = 179
+\]
+
+The largest angle is \(179\) degrees.
+</think>
+<answer>
+The measure of the largest angle is \(\\boxed{179}\) degrees.
+</answer><|im_end|>"""
+    
+    print("Testing augmented response (partial format):")
+    score = scorer.compute_score(augmented_response, ground_truth, scoring_mode="hierarchical_aug")
+    print(f"Hierarchical_aug mode score: {score}")
     
     print("\n" + "="*60)
     print("Demo completed!")

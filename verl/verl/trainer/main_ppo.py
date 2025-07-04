@@ -48,9 +48,13 @@ def _select_rm_score_fn(data_source, reward_type=None):
             # correct answer + format = 2, correct answer + incorrect format = 1, incorrect answer and others = -1
             scorer = MathScorer(debug_probability=0.02)
             return lambda solution_str, ground_truth: scorer.compute_score(solution_str, ground_truth, scoring_mode="hierarchical")
+        elif reward_type == 'spk_h_aug':
+            # hierarchical scoring with augmented question (partial format handling, the format should consider all format tokens appear in questions and responses)
+            scorer = MathScorer(debug_probability=0.02)
+            return lambda solution_str, ground_truth, extra_info=None: scorer.compute_score(solution_str, ground_truth, scoring_mode="hierarchical_aug", extra_info=extra_info)
         else:
             # default to hierarchical scoring
-            scorer = MathScorer(debug_probability=0.0)
+            scorer = MathScorer(debug_probability=0.02)
             return lambda solution_str, ground_truth: scorer.compute_score(solution_str, ground_truth, scoring_mode="hierarchical")
     else:
         raise NotImplementedError
