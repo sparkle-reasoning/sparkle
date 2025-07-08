@@ -152,6 +152,20 @@ Our key innovation is a two-stage curriculum approach:
 > Taking the given equation modulo 2, 3, and 5, respectively, we have:
 > n⁵ ≡ 0 (mod 2), n⁵ ≡ 0 (mod 3), n⁵ ≡ 4 (mod 5)
 
+## 🔧 TODOs
+
+- [ ] Release test sets - ETA by July 13, 2025
+- [ ] Provide additional evaluation scripts for fine-grained analysis
+
+## 🐛 Issues & Support
+
+If you encounter any problems, have questions, or would like to contribute to the project, please feel free to:
+
+- **Open an issue** on our GitHub repository
+- **Contact us directly** at [milawang@cs.wisc.edu](mailto:milawang@cs.wisc.edu)
+
+We welcome contributions, bug reports, and feature requests from the community!
+
 ## 📖 Citation
 
 If you find this work useful, please consider citing:
