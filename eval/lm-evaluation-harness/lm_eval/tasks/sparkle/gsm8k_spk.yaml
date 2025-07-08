@@ -1,7 +1,7 @@
 tag:
   - math_word_problems
-task: gsm8k_es
-dataset_path: MilaWang/gsm8k
+task: gsm8k_spk
+dataset_path: sparkle-reasoning/gsm8k
 dataset_name: default
 output_type: generate_until
 test_split: test
