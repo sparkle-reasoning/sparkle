@@ -23,6 +23,14 @@ if [ -z "$MODEL_PATH" ]; then
     MODEL_PATH="Qwen/Qwen2.5-Math-7B"
 fi
 
+# Extract base model name from path (e.g., "Qwen/Qwen2.5-Math-7B" -> "Qwen2.5-Math-7B")
+BASE_MODEL_NAME=$(basename "$MODEL_PATH")
+# Convert to lowercase and replace dots with dashes for cleaner naming
+BASE_MODEL_NAME_CLEAN=$(echo "$BASE_MODEL_NAME" | tr '[:upper:]' '[:lower:]' | tr '.' '-')
+
+# Set max response length (used in experiment name)
+MAX_RESPONSE_LENGTH=3000
+
 # Get current working directory
 CURRENT_DIR=$(pwd)
 
@@ -34,8 +42,8 @@ REWARD_TYPES=("spk_h")
 for reward_type in "${REWARD_TYPES[@]}"; do
     echo "Training with reward type: $reward_type"
 
-    # Create experiment name
-    EXPERIMENT_NAME="es-qwen-math-base-7b-3k-40k-$reward_type"
+    # Create experiment name: es-{base_model}-{max_length}-40k-{reward_type}
+    EXPERIMENT_NAME="es-${BASE_MODEL_NAME_CLEAN}-${MAX_RESPONSE_LENGTH}-40k-$reward_type"
     
     # Create timestamp for this specific run
     TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
@@ -53,7 +61,7 @@ for reward_type in "${REWARD_TYPES[@]}"; do
         data.val_files=${CURRENT_DIR}/data/sparkle_aime2024.parquet \
         data.train_batch_size=128 \
         data.max_prompt_length=1024 \
-        data.max_response_length=3000 \
+        data.max_response_length=$MAX_RESPONSE_LENGTH \
         actor_rollout_ref.model.path=$MODEL_PATH  \
         actor_rollout_ref.actor.optim.lr=1e-6 \
         actor_rollout_ref.model.use_remove_padding=True \
