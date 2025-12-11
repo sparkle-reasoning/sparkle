@@ -50,6 +50,7 @@ conda activate sparkle
 
 # Install PyTorch and Flash Attention
 pip3 install torch==2.4.0 
+pip install psutil numpy
 pip3 install flash-attn --no-build-isolation
 
 # Install VERL and dependencies
