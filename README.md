@@ -66,7 +66,7 @@ pip3 install -U antlr4-python3-runtime==4.9.3
 ```bash
 # Generate parquet files in data/*.parquet
 python scripts/data/prepare_stage_one_data.py
-python scripts/data/prepare_stage_two_data.py --aug_version all  # Recommended based on our ablation studies
+python scripts/data/prepare_stage_two_data_aug.py --aug_version all  # Recommended based on our ablation studies
 ```
 
 ### Training
